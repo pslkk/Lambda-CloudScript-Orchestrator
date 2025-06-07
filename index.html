@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Async Internet Speedometer</title>
+  <meta name="viewport" content="width=280, initial-scale=1.0">
+  <style>
+    body {
+      background: #222;
+      color: #fff;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    button {
+      padding: 14px 32px;
+      font-size: 1.2rem;
+      background: #1e90ff;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 40px;
+      transition: background 0.2s;
+    }
+    button:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    button:hover, button:focus {
+      background: #63b3ed;
+      outline: none;
+    }
+    .input-group {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .input-group label {
+      margin-bottom: 8px;
+      font-size: 1.1rem;
+    }
+    .input-group select {
+      padding: 10px 15px;
+      font-size: 1rem;
+      border-radius: 5px;
+      border: 1px solid #555;
+      background: #333;
+      color: #fff;
+      width: 250px;
+    }
+    .speedometer-container {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 20px;
+    }
+    .speedometer {
+      width: 280px;
+      height: 140px;
+      position: relative;
+    }
+    .speedometer svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .needle {
+      transition: transform 1.5s cubic-bezier(0.4, 2.2, 0.2, 1);
+      will-change: transform;
+    }
+    .speed-value {
+      font-size: 2.2rem;
+      font-weight: bold;
+      margin-top: 18px;
+      letter-spacing: 2px;
+      color: #1e90ff;
+      text-shadow: 0 2px 8px #111a;
+    }
+    .loading {
+      margin-top: 12px;
+      font-size: 1.1rem;
+      color: #aaa;
+      letter-spacing: 1px;
+      animation: blink 1.2s linear infinite alternate;
+    }
+    @keyframes blink {
+      0% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+    .error-message {
+      color: #ff3c00;
+      margin-top: 14px;
+      font-size: 1.1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="input-group">
+        <label for="scriptNameSelect">Select Script:</label>
+        <select id="scriptNameSelect">
+            <option value="">-- Please select a script --</option>
+            <option value="you scriptname only (without extension)">Internet Speed Test</option>
+        </select>
+  </div>
+  <button id="showBtn" aria-controls="speedometerContainer" tabindex="0">Show Speedometer</button>
+  <section class="speedometer-container" id="speedometerContainer" aria-live="polite">
+    <div class="speedometer">
+      <svg id="gauge" viewBox="0 0 280 140" role="img" aria-label="Speedometer">
+        <!-- Arc background (semicircle) -->
+        <path id="arc-bg" fill="none" stroke="#444" stroke-width="22"/>
+        <!-- Arc foreground (colored, same path) -->
+        <path id="arc" fill="none" stroke="#1e90ff" stroke-width="14"/>
+        <!-- Needle (base at 140,130, extends upward) -->
+        <g id="needle-group">
+          <rect id="needle" x="137" y="50" width="6" height="80" rx="3" fill="#ff3c00"/>
+        </g>
+        <!-- Center circle -->
+        <circle cx="140" cy="130" r="14" fill="#fff" stroke="#1e90ff" stroke-width="4"/>
+      </svg>
+    </div>
+    <div class="speed-value" id="speedValue">0 Mbps</div>
+    <div class="loading" id="loadingMsg" style="display:none;">Testing speed…</div>
+    <div class="error-message" id="errorMsg" style="display:none;"></div>
+  </section>
+
+  <script>
+    // ----------- CONFIGURE THESE FOR YOUR API -----------
+    const API_GATEWAY_INITIAL_ENDPOINT = "https://api.example.com/start"; // Replace it with http api trigger of your main lambda
+    const API_GATEWAY_POLLING_ENDPOINT = "https://api.example.com/poll"; // Replace it with http api trigger of your interphase lambda
+    const AUTH_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
+
+    // ----------- SPEEDOMETER CONFIG -----------
+    const centerX = 140;
+    const centerY = 130;
+    const radius = 100;
+    const minAngle = -90; // degrees
+    const maxAngle = 90;  // degrees
+    const maxSpeed = 150; // Max Mbps shown on gauge
+
+    // ----------- SVG ARC PATH GENERATOR -----------
+    function polarToCartesian(cx, cy, r, angleDeg) {
+      const angleRad = (angleDeg - 90) * Math.PI / 180.0;
+      return {
+        x: cx + r * Math.cos(angleRad),
+        y: cy + r * Math.sin(angleRad)
+      };
+    }
+    function describeArc(cx, cy, r, startAngle, endAngle) {
+      const start = polarToCartesian(cx, cy, r, startAngle);
+      const end = polarToCartesian(cx, cy, r, endAngle);
+      const arcSweep = endAngle - startAngle <= 180 ? "0" : "1";
+      return [
+        "M", start.x, start.y,
+        "A", r, r, 0, arcSweep, 1, end.x, end.y
+      ].join(" ");
+    }
+
+    // ----------- SPEEDOMETER ANIMATION -----------
+    function clamp(val, min, max) {
+      return Math.max(min, Math.min(max, val));
+    }
+
+    function animateSpeedometer(targetSpeed) {
+      let currentSpeed = 0;
+      const duration = 1500;
+      const start = performance.now();
+
+      if (window.animationFrameId) {
+        cancelAnimationFrame(window.animationFrameId);
+        window.animationFrameId = null;
+      }
+
+      const arc = document.getElementById('arc');
+      const needleGroup = document.getElementById('needle-group');
+      const speedValue = document.getElementById('speedValue');
+
+      const arcLen = arc.getTotalLength();
+      arc.style.strokeDasharray = arcLen;
+      arc.style.strokeDashoffset = arcLen;
+
+      function animate(time) {
+        const elapsed = Math.min((time - start) / duration, 1);
+        const progress = 1 - Math.pow(1 - elapsed, 3);
+        currentSpeed = Math.round(progress * targetSpeed * 100) / 100;
+
+        // Calculate angle
+        const angle = minAngle + ((maxAngle - minAngle) * currentSpeed / maxSpeed);
+        needleGroup.setAttribute('transform', `rotate(${angle} ${centerX} ${centerY})`);
+
+        // Animate arc foreground (stroke-dashoffset)
+        arc.style.strokeDashoffset = arcLen - (arcLen * currentSpeed / maxSpeed);
+
+        speedValue.textContent = `${currentSpeed} Mbps`;
+
+        if (elapsed < 1) {
+          window.animationFrameId = requestAnimationFrame(animate);
+        } else {
+          needleGroup.setAttribute('transform', `rotate(${minAngle + ((maxAngle - minAngle) * targetSpeed / maxSpeed)} ${centerX} ${centerY})`);
+          arc.style.strokeDashoffset = arcLen - (arcLen * targetSpeed / maxSpeed);
+          speedValue.textContent = `${targetSpeed} Mbps`;
+          window.animationFrameId = null;
+        }
+      }
+
+      window.animationFrameId = requestAnimationFrame(animate);
+    }
+
+    // ----------- ASYNC API LOGIC -----------
+
+    async function initiateLongTask(payload) {
+      try {
+        const initialResponse = await fetch(API_GATEWAY_INITIAL_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': AUTH_TOKEN,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        if (initialResponse.status === 202) {
+          const data = await initialResponse.json();
+          const jobId = data.jobId;
+          return jobId;
+        } else {
+          const errorData = await initialResponse.json();
+          throw new Error(`API Error during initiation (${initialResponse.status}): ${errorData.message || 'Unknown error'}`);
+        }
+      } catch (error) {
+        throw error;
+      }
+    }
+
+    async function pollForTaskResult(jobId, maxAttempts = 120, intervalMs = 5000) {
+      let attempts = 0;
+      const startTime = Date.now();
+      const MAX_WAIT_MS = 10 * 60 * 1000; // 10 minutes
+
+      while (Date.now() - startTime < MAX_WAIT_MS && attempts < maxAttempts) {
+        attempts++;
+        try {
+          const pollResponse = await fetch(`${API_GATEWAY_POLLING_ENDPOINT}?jobId=${jobId}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          });
+
+          if (pollResponse.status === 200) {
+            const result = await pollResponse.json();
+            return result; // Task successful, return result
+          } else if (pollResponse.status === 202) {
+            await new Promise(resolve => setTimeout(resolve, intervalMs)); // Wait before next poll
+          } else {
+            const errorData = await pollResponse.json();
+            throw new Error(`Polling API Error (${pollResponse.status}): ${errorData.message || 'Unknown error'}`);
+          }
+        } catch (error) {
+          await new Promise(resolve => setTimeout(resolve, intervalMs)); // Wait before retrying
+        }
+      }
+      throw new Error('Task processing timed out or failed to complete within the allowed time.');
+    }
+
+    // ----------- MAIN WORKFLOW ON BUTTON PRESS -----------
+    document.addEventListener('DOMContentLoaded', function() {
+      // Initialize SVG arcs
+      document.getElementById('arc-bg').setAttribute(
+        'd',
+        describeArc(centerX, centerY, radius, minAngle, maxAngle)
+      );
+      document.getElementById('arc').setAttribute(
+        'd',
+        describeArc(centerX, centerY, radius, minAngle, maxAngle)
+      );
+      document.getElementById('needle-group').setAttribute(
+        'transform', `rotate(${minAngle} ${centerX} ${centerY})`
+      );
+
+      const showBtn = document.getElementById('showBtn');
+      const speedometerContainer = document.getElementById('speedometerContainer');
+      const speedValue = document.getElementById('speedValue');
+      const loadingMsg = document.getElementById('loadingMsg');
+      const errorMsg = document.getElementById('errorMsg');
+      const scriptNameSelect = document.getElementById('scriptNameSelect');
+
+      showBtn.addEventListener('click', async () => {
+        const scriptName = scriptNameSelect.value; // Get the selected value
+        if (!scriptName) {
+          errorMsg.textContent = "Please select a script name.";
+          errorMsg.style.display = 'block';
+          return; // Stop if no script name is selected
+        }
+
+        const jsonData = {
+          name: scriptName,
+          // timestamp: new Date().toISOString(), // Uncomment if your API expects a timestamp
+        };
+
+        // UI: Show gauge, reset state
+        speedometerContainer.style.display = 'flex';
+        loadingMsg.style.display = 'block';
+        errorMsg.style.display = 'none';
+        speedValue.textContent = '0 Mbps';
+        showBtn.disabled = true;
+
+        try {
+          // 1. Initiate the long-running task
+          const jobId = await initiateLongTask(jsonData);
+
+          // 2. Poll for result
+          const response = await pollForTaskResult(jobId);
+
+          // 3. Extract speed from response (adjust this as per your API response structure!)
+          // Example for expected structure: { speedMbps: 27.5, ... }
+          let speedMbps = 0;
+          if (response && typeof response.speedMbps === "number") {
+            speedMbps = response.speedMbps;
+          } else if (response && response.stdout) {
+            // If nested JSON in stdout (as in your earlier code)
+            try {
+              const parsed = JSON.parse(response.stdout);
+              speedMbps = parsed.speedMbps || 0;
+            } catch (e) {
+              speedMbps = 0;
+            }
+          }
+          const targetSpeed = clamp(speedMbps, 0, maxSpeed);
+
+          // 4. Animate the speedometer
+          loadingMsg.style.display = 'none';
+          animateSpeedometer(targetSpeed);
+
+        } catch (error) {
+          loadingMsg.style.display = 'none';
+          errorMsg.style.display = 'block';
+          errorMsg.textContent = "Error: " + (error.message || error);
+        } finally {
+          setTimeout(() => { showBtn.disabled = false; }, 1800);
+        }
+      });
+
+      showBtn.addEventListener('keyup', (e) => {
+        if (e.key === "Enter" || e.key === " ") showBtn.click();
+      });
+    });
+  </script>
+</body>
+</html>
