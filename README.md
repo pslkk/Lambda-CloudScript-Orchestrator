@@ -1,6 +1,71 @@
 # Lambda-CloudScript-Orchestrator
 Lambda CloudScript Orchestrator means a cloud-based system that uses AWS Lambda to centrally coordinate and execute different scripts (tasks) across multiple Lambda functions, enabling flexible, serverless, and automated workflow management in the cloud
 
+Note: This repository is designed for much more than just network speed tests! It's a versatile framework where you can design and execute virtually any client-side task. Simply create your custom JavaScript files (e.g., abcd.js, xyz.js) and add their script names (like "abcd.js" or "xyz.js") to the options list within your index.html file. The system will then seamlessly dispatch and run these custom scripts on the client side, giving you immense flexibility in defining your remote operations.
+
+My Workflow: Client Network Speed Measurement via AWS Lambda and DynamoDB
+  - This workflow automates the measurement of client-side network speed and displays the results on a main local server, leveraging AWS Lambda for serverless processing and DynamoDB for inter-process communication.
+
+Workflow Goal: To measure the network speed of a remote client and display it on a speedometer interface on a central main local server.
+
+Actors:
+
+  - Main Local Server: mainlocalserver.js (Node.js application)
+  - index.html
+  - Main Lambda: AWS Lambda function
+  - Client Side: clientside.js (Node.js application)
+  - Client Side Lambda: AWS Lambda function
+  - DynamoDB Table 1: firstTablename (e.g., ClientTaskQueue)
+  - DynamoDB Table 2: secondTablename (e.g., ClientResults)
+  - Script Name Files: scriptname.js (e.g., intspd.js, latency_test.js, etc.)
+  
+Prerequisites and Setup:
+
+  - Before running the workflow, ensure the following are set up:
+  - Node.js Installation:
+
+    - Install Node.js on both your "main side" and "client side" machines if you haven't already.
+
+  - Axios Installation:
+    
+    - axios is a promise-based HTTP client for the browser and Node.js. It will be used for making HTTP API calls to your Lambda functions.
+
+    - On both the Main Side and Client Side: Navigate to your project directory (where mainlocalserver.js is and where clientside.js is, respectively) in your command prompt/terminal.
+    - Run the following command to install axios: -npm install axios
+      
+  - AWS Account and CLI (Optional but Recommended):
+
+    - Ensure you have an AWS account and have configured your AWS CLI (Command Line Interface) with appropriate credentials. This is useful for managing Lambda functions and DynamoDB tables.
+    
+    - DynamoDB Table Creation:
+
+      - You need two DynamoDB tables. While the names firstTablename and secondTablename are placeholders, you can change them as per your requirements (e.g., ClientTaskQueue and ClientResults).
+        
+      - firstTablename (e.g., ClientTaskQueue):
+        - Purpose: Acts as a queue for tasks (scripts) to be executed by clients.
+        - Primary Key (PK): jobId (String) - A unique identifier for each task.
+        - Sort Key (SK): timestamp (Number) - To ensure FIFO processing (First-In, First-Out) of tasks based on when they were added.
+      - secondTablename (e.g., ClientResults):
+        - Purpose: Stores the processed results sent back by the clients.
+        - Primary Key (PK): jobId (String) - To link results back to the original task.
+        - Sort Key (SK): timestamp (Number) - To track when the result was recorded.
+
+  - AWS Lambda Functions Deployment:
+
+    - Deploy your Main Lambda and Client Side Lambda functions to AWS Lambda.
+    - Ensure they are configured with HTTP API Gateway triggers.
+    - Grant appropriate IAM permissions for both Lambda functions to interact with your DynamoDB tables (read/write access to their respective tables).
+
+    - Client-Side Script Files (.js):
+
+      - Create the JavaScript files that will contain the logic for the network speed tests or other client-side operations (e.g., network_speed_test.js, latency_test.js).
+      - Important: Place these scriptname.js files in the same folder/project directory where your clientside.js file is located on the client machine.
+
+    - Main Local Server Configuration (mainlocalserver.js / index.js):
+
+      - Your mainlocalserver.js (or a configuration file it reads, potentially named index.js as you mentioned) will need to include an "options" section or array where you specify the scriptname strings that you want to send to the client.
+      - For example, you might have an array like ['intspd.js', 'latency_test.js'] that the mainlocalserver.js iterates through to trigger tasks. This allows you to run as many different scripts as needed.
+
 How this works (Complete Workflow):
 
 - Main Local Server Initialization (Trigger):
