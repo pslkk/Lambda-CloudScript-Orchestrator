@@ -1,7 +1,7 @@
 # Lambda-CloudScript-Orchestrator
 Lambda CloudScript Orchestrator means a cloud-based system that uses AWS Lambda to centrally coordinate and execute different scripts (tasks) across multiple Lambda functions, enabling flexible, serverless, and automated workflow management in the cloud
 
-Note: This repository is designed for much more than just network speed tests! It's a versatile framework where you can design and execute virtually any client-side task. Simply create your custom JavaScript files (e.g., abcd.js, xyz.js) and add their script names (like "abcd.js" or "xyz.js") to the options list within your index.html file. The system will then seamlessly dispatch and run these custom scripts on the client side, giving you immense flexibility in defining your remote operations.
+Note: This repository is designed for much more than just network speed tests! It's a versatile framework where you can design and execute virtually any client-side task. Simply create your custom JavaScript files (e.g., abcd, xyz) and add their script names (like "abcd.js" or "xyz.js") to the options list within your index.html file. The system will then seamlessly dispatch and run these custom scripts on the client side, giving you immense flexibility in defining your remote operations.
 
 My Workflow: Client Network Speed Measurement via AWS Lambda and DynamoDB
   - This workflow automates the measurement of client-side network speed and displays the results on a main local server, leveraging AWS Lambda for serverless processing and DynamoDB for inter-process communication.
