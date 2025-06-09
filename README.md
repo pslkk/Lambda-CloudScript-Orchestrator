@@ -123,3 +123,5 @@ How this works (Complete Workflow):
   - mainlocalserver.js receives the data (network speed) or the "timeout" message from Main Lambda.
   - Action: If data is received, displays the network speed on a speedometer.
   - Action: If "timeout" is received, displays a "Timeout" message.
+
+//---------------------------------------------------------------------------------END------------------------------------------------------------------------------------//
