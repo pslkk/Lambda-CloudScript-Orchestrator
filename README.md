@@ -42,12 +42,12 @@ Prerequisites and Setup:
         
       - firstTablename (e.g., ClientTaskQueue):
         - Purpose: Acts as a queue for tasks (scripts) to be executed by clients.
-        - Primary Key (PK): jobId (String) - A unique identifier for each task.
-        - Sort Key (SK): timestamp (Number) - To ensure FIFO processing (First-In, First-Out) of tasks based on when they were added.
+        - Partition Key: pk (loaded with "data") is a string which is constant and same for every input.
+        - Sort Key: timestamp (Number) - To ensure FIFO processing (First-In, First-Out) of tasks based on when they were added.
       - secondTablename (e.g., ClientResults):
         - Purpose: Stores the processed results sent back by the clients.
-        - Primary Key (PK): jobId (String) - To link results back to the original task.
-        - Sort Key (SK): timestamp (Number) - To track when the result was recorded.
+        - Partition Key: pk (loaded with "data") is a string which is constant and same for every input.
+        - Sort Key: timestamp (Number) - To track when the result was recorded.
 
   - AWS Lambda Functions Deployment:
 
